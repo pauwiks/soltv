@@ -1,89 +1,98 @@
-// Sol.tv MVP - Starter React Frontend with Firebase Auth and Plyr.js
+// ✅ src/App.js
+import React, { useEffect, useState } from "react";
+import { BrowserRouter as Router, Routes, Route, Link } from "react-router-dom";
+import { db, auth } from "./firebase";
+import {
+  GoogleAuthProvider,
+  signInWithPopup,
+  signOut,
+  onAuthStateChanged,
+} from "firebase/auth";
+import {
+  collection,
+  addDoc,
+  serverTimestamp,
+} from "firebase/firestore";
+import Watch from "./pages/Watch";
+import Admin from "./pages/Admin";
+import "./App.css";
 
-import React from "react";
-import { BrowserRouter as Router, Route, Routes } from "react-router-dom";
-import { initializeApp } from "firebase/app";
-import { getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
-import Plyr from "plyr-react";
-import "plyr-react/plyr.css";
-
-// ✅ Firebase config for Sol.tv
-const firebaseConfig = {
-  apiKey: "AIzaSyDrF5m9nM83Fza4AUqwPdk1_PhKb3lez3A",
-  authDomain: "soltv-f789d.firebaseapp.com",
-  projectId: "soltv-f789d",
-  storageBucket: "soltv-f789d.appspot.com",
-  messagingSenderId: "744268830742",
-  appId: "1:744268830742:web:1f23fe7a9fa085047f3d37"
-};
-
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
 const provider = new GoogleAuthProvider();
-
-const Login = ({ setUser }) => {
-  const login = async () => {
-    const result = await signInWithPopup(auth, provider);
-    setUser(result.user);
-  };
-  return <button onClick={login}>Sign in with Google</button>;
-};
-
-const Logout = ({ setUser }) => {
-  const logout = async () => {
-    await signOut(auth);
-    setUser(null);
-  };
-  return <button onClick={logout}>Logout</button>;
-};
-
-const Home = ({ user }) => {
-  return (
-    <div>
-      <h1>Welcome to Sol.tv</h1>
-      {user ? <p>Hello, {user.displayName}</p> : <p>Please sign in to watch.</p>}
-    </div>
-  );
-};
-
-const Watch = () => {
-  return (
-    <div>
-      <h2>Now Playing</h2>
-      <Plyr
-        source={{
-          type: "video",
-          sources: [
-            {
-              src: "https://archive.org/download/Plan_9_from_Outer_Space/Plan_9_from_Outer_Space_512kb.mp4",
-              type: "video/mp4"
-            }
-          ]
-        }}
-      />
-    </div>
-  );
-};
+const ADMIN_EMAIL = "paulosolana@yahoo.com";
 
 function App() {
-  const [user, setUser] = React.useState(null);
+  const [user, setUser] = useState(null);
+  const [form, setForm] = useState({
+    title: "",
+    year: "",
+    videoUrl: "",
+    thumbnail: "",
+  });
 
-  React.useEffect(() => {
-    onAuthStateChanged(auth, (user) => {
-      setUser(user);
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
     });
+    return () => unsubscribe();
   }, []);
+
+  const login = () => signInWithPopup(auth, provider);
+  const logout = () => signOut(auth);
+
+  const handleChange = (e) => {
+    setForm({ ...form, [e.target.name]: e.target.value });
+  };
+
+  const handleUpload = async (e) => {
+    e.preventDefault();
+    try {
+      await addDoc(collection(db, "movies"), {
+        ...form,
+        year: parseInt(form.year),
+        addedBy: user.email,
+        timestamp: serverTimestamp(),
+      });
+      alert("Movie uploaded!");
+      setForm({ title: "", year: "", videoUrl: "", thumbnail: "" });
+    } catch (err) {
+      alert("Upload failed: " + err.message);
+    }
+  };
+
+  const Home = () => (
+    <div style={{ padding: "2rem" }}>
+      <h1>Sol.tv</h1>
+      {user ? (
+        <>
+          <p>Welcome, {user.displayName}</p>
+          <button onClick={logout}>Logout</button>
+          {user.email === ADMIN_EMAIL && (
+            <form onSubmit={handleUpload} style={{ marginTop: "20px" }}>
+              <h3>🎬 Admin Upload</h3>
+              <input name="title" placeholder="Title" value={form.title} onChange={handleChange} required />
+              <input name="year" placeholder="Year" value={form.year} onChange={handleChange} required />
+              <input name="videoUrl" placeholder="Video URL" value={form.videoUrl} onChange={handleChange} required />
+              <input name="thumbnail" placeholder="Thumbnail URL" value={form.thumbnail} onChange={handleChange} />
+              <button type="submit">Upload</button>
+            </form>
+          )}
+        </>
+      ) : (
+        <button onClick={login}>Login with Google</button>
+      )}
+      <div style={{ marginTop: "30px" }}>
+        <Link to="/watch">🎥 Watch Movies</Link> | <Link to="/admin">👑 Admin Page</Link>
+      </div>
+    </div>
+  );
 
   return (
     <Router>
-      <div className="p-4 text-center">
-        <h1 className="text-3xl font-bold mb-4">Sol.tv</h1>
-        {user ? <Logout setUser={setUser} /> : <Login setUser={setUser} />}
-        <Routes>
-          <Route path="/" element={<Home user={user} />} />
-          <Route path="/watch" element={<Watch />} />
-        </Routes>
-      </div>
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/watch" element={<Watch />} />
+        <Route path="/admin" element={<Admin />} />
+      </Routes>
     </Router>
   );
 }
